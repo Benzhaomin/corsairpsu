@@ -2,6 +2,12 @@
 
 CorsairPSU is a simple hwmon Linux kernel module for Corsair RMi and HXi Series PSUs to view power usage, and more info about your PSU.
 
+All values are exposed using the sysfs interface (`/sys/class/hwmon/hwmon*/`).
+
+Sensors, except a few custom attributes, can also be viewed with the `sensors` command.
+
+## Usage
+
 ```bash
 $ sensors
 corsairpsu-hid-3-3
@@ -20,6 +26,12 @@ power 3.3v:       7.00 W
 current 12v:      6.00 A
 current 5v:       2.88 A
 current 3.3v:     2.19 A
+$ cat /sys/class/hwmon/hwmon3/current_uptime
+6884
+$ cat /sys/class/hwmon/hwmon3/total_uptime
+23216087
+$ cat /sys/class/hwmon/hwmon3/ocp_mode
+2
 ```
 
 ## Install
@@ -50,8 +62,8 @@ sudo rmmod corsairpsu
 or with DKMS
 
 ```bash
-sudo make dkms-uninstall
 sudo modprobe -r corsairpsu
+sudo make dkms-uninstall
 ```
 
 ## Dev
@@ -59,4 +71,5 @@ sudo modprobe -r corsairpsu
 ```bash
 make
 sudo rmmod corsairpsu; sudo insmod corsairpsu.ko; sensors | grep corsairpsu -A 15
+sudo modprobe usbmon; sudo wireshark
 ```

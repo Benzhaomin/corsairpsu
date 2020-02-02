@@ -19,7 +19,7 @@ endif
 obj-m	:= $(patsubst %,%.o,corsairpsu)
 obj-ko	:= $(patsubst %,%.ko,corsairpsu)
 
-.PHONY: all modules clean dkms-install dkms-install-swapped dkms-uninstall
+.PHONY: all modules clean dkms-install dkms-uninstall
 
 all: modules
 

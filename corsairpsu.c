@@ -78,12 +78,13 @@ static int usb_send_recv_cmd(struct corsairpsu_data* data) {
 
 	Name             Length  Opcode  Example
 	---              ---     ---     ---
-	name             0xfe    0x03    'RM650i'
+	name             0xFE    0x03    'RM650i'
 	vendor           0x03    0x99    'CORSAIR'
 	product          0x03    0x9A    'RM650i'
 	temp1            0x03    0x8D    46.2
 	temp2            0x03    0x8E    39.0
 	fan rpm          0x03    0x90    0.0
+	fan control      0x03    0xF0    0 (hardware) or 1 (software)
 	voltage supply   0x03    0x88    230.0
 	power total      0x03    0xEE    82.0
 	voltage 12v      0x03    0x8B    12.1
@@ -95,18 +96,17 @@ static int usb_send_recv_cmd(struct corsairpsu_data* data) {
 	voltage 3.3v     0x03    0x8B    3.3
 	current 3.3v     0x03    0x8C    2.2
 	power 3.3v       0x03    0x96    7.0
+	total uptime     0x03    0xD1    23160895
+	uptime           0x03    0xD2    41695
+	ocp mode         0x03    0xD8    1 (mono rail) or 2 (multi rail)
 
 	select one of the three rails with 0x02, 0x00, [0x00|0x01|0x02]
 
 	TODO
 
-	ocp mode         0x03    0xD8    TODO
-	fan control      0x03    0xF0    TODO
-	total uptime     0x03    0xD1    23160895 (268d. 1h)
-	uptime           0x03    0xD2    41695 (0d. 11h)
-	3a fan mode
-	3b fan pwm
-	81 fan status
+	fan mode         0x03    0x3A    TODO
+	fan pwm          0x03    0x3B    TODO
+	fan status       0x03    0x81    TODO
 */
 static int send_recv_cmd(struct corsairpsu_data* data, u8 length, u8 opcode, u8 opdata,
 							void *result, size_t result_size) {
@@ -362,8 +362,7 @@ static const char *corsairpsu_power_label[] = {
 
 static int corsairpsu_read_labels(struct device *dev,
 				enum hwmon_sensor_types type, u32 attr,
-				int channel, const char **str)
-{
+				int channel, const char **str) {
 	switch (type) {
 		case hwmon_chip:
 			*str = corsairpsu_chip_label[channel];
@@ -435,6 +434,63 @@ static const struct hwmon_chip_info corsairpsu_chip_info = {
 	.info = corsairpsu_info,
 };
 
+// helper to read a custom attribute
+static ssize_t u32_show(struct device *dev, struct device_attribute *attr,
+						char *buf, u16 opcode) {
+	int len = 0;
+	struct corsairpsu_data *data = dev_get_drvdata(dev);
+	u32 reading;
+
+	send_recv_cmd(data, 0x03, opcode, 0x00, &reading, sizeof(u32));
+	len += sprintf(buf, "%u\n", reading);
+
+	return len;
+}
+
+// total PSU uptime in seconds
+static ssize_t total_uptime_show(struct device *dev, struct device_attribute *attr,
+								char *buf) {
+	return u32_show(dev, attr, buf, 0xD1);
+}
+static DEVICE_ATTR_RO(total_uptime);
+
+// current PSU uptime in seconds
+static ssize_t current_uptime_show(struct device *dev,
+				struct device_attribute *attr, char *buf) {
+	return u32_show(dev, attr, buf, 0xD2);
+}
+static DEVICE_ATTR_RO(current_uptime);
+
+// OCP (Over Current Protection) mode
+// 1 for single rail, 2 for multi rail
+static ssize_t ocp_mode_show(struct device *dev, struct device_attribute *attr,
+							char *buf) {
+	return u32_show(dev, attr, buf, 0xD8);
+}
+static DEVICE_ATTR_RO(ocp_mode);
+
+// Fan control mode
+// 0 for hardware or 1 for software
+static ssize_t fan_control_show(struct device *dev, struct device_attribute *attr,
+								char *buf) {
+	return u32_show(dev, attr, buf, 0xF0);
+}
+static DEVICE_ATTR_RO(fan_control);
+
+// custom attributes, can be read through /sys/class/hwmon/hwmon* but not 'sensors'
+static struct attribute *corsairpsu_attrs[] = {
+	&dev_attr_total_uptime.attr,
+	&dev_attr_current_uptime.attr,
+	&dev_attr_ocp_mode.attr,
+	&dev_attr_fan_control.attr,
+	NULL
+};
+
+static const struct attribute_group corsairpsu_group = {
+	.attrs = corsairpsu_attrs
+};
+__ATTRIBUTE_GROUPS(corsairpsu);
+
 static int corsairpsu_probe(struct hid_device *dev, const struct hid_device_id *id) {
 	int ret;
 	struct usb_interface *usbif = to_usb_interface(dev->dev.parent);
@@ -465,7 +521,7 @@ static int corsairpsu_probe(struct hid_device *dev, const struct hid_device_id *
 
 	// register hwmon device
 	hwmon_dev = devm_hwmon_device_register_with_info(
-		&dev->dev, "corsairpsu", data, &corsairpsu_chip_info, NULL
+		&dev->dev, "corsairpsu", data, &corsairpsu_chip_info, corsairpsu_groups
 	);
 
 	// say hello
