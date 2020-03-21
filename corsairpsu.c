@@ -5,6 +5,7 @@
  *
  * Tested devices:
  *	- RM650i
+ *	- HX1000i
  *
  * Based on:
  *  - corsairmi        Copyright (c) 2016 notaz             https://github.com/notaz/corsairmi
@@ -36,9 +37,12 @@
 MODULE_DESCRIPTION("hwmon HID driver for the Corsair RMi and HXi series of PSUs");
 MODULE_AUTHOR("Benjamin Maisonnas");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("0.1.6");
+MODULE_VERSION("0.1.7");
 
 #define USB_VENDOR_ID_CORSAIR	0x1b1c
+
+#define USB_MUTEX_LOCKED_ERR -99
+static DEFINE_MUTEX(usbdev_mutex);
 
 struct corsairpsu_data {
 	struct usb_device *usbdev;
@@ -53,11 +57,17 @@ struct corsairpsu_data {
 static int usb_send_recv_cmd(struct corsairpsu_data* data) {
 	int ret, actual_length;
 
+	ret = mutex_trylock(&usbdev_mutex);
+	if (ret == 0) {
+		return USB_MUTEX_LOCKED_ERR;
+	}
+
 	ret = usb_interrupt_msg(data->usbdev, usb_sndintpipe(data->usbdev, 0x01),
 				data->buf, 64, &actual_length,
 				USB_CTRL_SET_TIMEOUT);
 	if (ret < 0) {
 		dev_err(&data->usbdev->dev, "Failed to send HID Request (error %d)\n", ret);
+		mutex_unlock(&usbdev_mutex);
 		return ret;
 	}
 
@@ -67,8 +77,11 @@ static int usb_send_recv_cmd(struct corsairpsu_data* data) {
 				USB_CTRL_SET_TIMEOUT);
 	if (ret < 0) {
 		dev_err(&data->usbdev->dev, "Failed to get HID Response (error: %d).\n", ret);
+		mutex_unlock(&usbdev_mutex);
 		return ret;
 	}
+
+	mutex_unlock(&usbdev_mutex);
 
 	return 0;
 }
@@ -164,6 +177,7 @@ static int corsairpsu_read(struct device *dev, enum hwmon_sensor_types type,
 
 	struct corsairpsu_data *data = dev_get_drvdata(dev);
 	u16 reading;
+	int ret;
 
 	switch (type) {
 		// Chip
@@ -172,7 +186,10 @@ static int corsairpsu_read(struct device *dev, enum hwmon_sensor_types type,
 				case hwmon_chip:
 					switch (channel) {
 						case 0: // temp1
-							send_recv_cmd(data, 0x03, 0x8D, 0x00, &reading, sizeof(u16));
+							ret = send_recv_cmd(data, 0x03, 0x8D, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
 							*val = pmbus_linear11_to_long(reading, 1000L);
 							break;
 						default:
@@ -190,11 +207,17 @@ static int corsairpsu_read(struct device *dev, enum hwmon_sensor_types type,
 				case hwmon_temp_input:
 					switch (channel) {
 						case 0: // temp1
-							send_recv_cmd(data, 0x03, 0x8D, 0x00, &reading, sizeof(u16));
+							ret = send_recv_cmd(data, 0x03, 0x8D, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
 							*val = pmbus_linear11_to_long(reading, 1000L);
 							break;
 						case 1: // temp2
-							send_recv_cmd(data, 0x03, 0x8E, 0x00, &reading, sizeof(u16));
+							ret = send_recv_cmd(data, 0x03, 0x8E, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
 							*val = pmbus_linear11_to_long(reading, 1000L);
 							break;
 						default:
@@ -212,7 +235,10 @@ static int corsairpsu_read(struct device *dev, enum hwmon_sensor_types type,
 				case hwmon_fan_input:
 					switch (channel) {
 						case 0: // fan rpm
-							send_recv_cmd(data, 0x03, 0x90, 0x00, &reading, sizeof(u16));
+							ret = send_recv_cmd(data, 0x03, 0x90, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
 							*val = pmbus_linear11_to_long(reading, 0L);
 							break;
 						default:
@@ -230,22 +256,43 @@ static int corsairpsu_read(struct device *dev, enum hwmon_sensor_types type,
 				case hwmon_in_input:
 					switch (channel) {
 						case 0: // voltage supply
-							send_recv_cmd(data, 0x03, 0x88, 0x00, &reading, sizeof(u16));
+							ret = send_recv_cmd(data, 0x03, 0x88, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
 							*val = pmbus_linear11_to_long(reading, 1000L);
 							break;
 						case 1: // voltage 12v
-							send_recv_cmd(data, 0x02, 0x00, 0x00, NULL, 0);
-							send_recv_cmd(data, 0x03, 0x8B, 0x00, &reading, sizeof(u16));
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x00, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x8B, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
 							*val = pmbus_linear11_to_long(reading, 1000L);
 							break;
 						case 2: // voltage 5v
-							send_recv_cmd(data, 0x02, 0x00, 0x01, NULL, 0);
-							send_recv_cmd(data, 0x03, 0x8B, 0x00, &reading, sizeof(u16));
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x01, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x8B, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
 							*val = pmbus_linear11_to_long(reading, 1000L);
 							break;
 						case 3: // voltage 3.3v
-							send_recv_cmd(data, 0x02, 0x00, 0x02, NULL, 0);
-							send_recv_cmd(data, 0x03, 0x8B, 0x00, &reading, sizeof(u16));
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x02, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x8B, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
 							*val = pmbus_linear11_to_long(reading, 1000L);
 							break;
 						default:
@@ -263,18 +310,36 @@ static int corsairpsu_read(struct device *dev, enum hwmon_sensor_types type,
 				case hwmon_curr_input:
 					switch (channel) {
 						case 0: // current 12v
-							send_recv_cmd(data, 0x02, 0x00, 0x00, NULL, 0);
-							send_recv_cmd(data, 0x03, 0x8C, 0x00, &reading, sizeof(u16));
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x00, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x8C, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
 							*val = pmbus_linear11_to_long(reading, 1000L);
 							break;
 						case 1: // current 5v
-							send_recv_cmd(data, 0x02, 0x00, 0x01, NULL, 0);
-							send_recv_cmd(data, 0x03, 0x8C, 0x00, &reading, sizeof(u16));
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x01, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x8C, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
 							*val = pmbus_linear11_to_long(reading, 1000L);
 							break;
 						case 2: // current 3.3v
-							send_recv_cmd(data, 0x02, 0x00, 0x02, NULL, 0);
-							send_recv_cmd(data, 0x03, 0x8C, 0x00, &reading, sizeof(u16));
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x02, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x8C, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
 							*val = pmbus_linear11_to_long(reading, 1000L);
 							break;
 						default:
@@ -292,22 +357,43 @@ static int corsairpsu_read(struct device *dev, enum hwmon_sensor_types type,
 				case hwmon_power_input:
 					switch (channel) {
 						case 0: // power total
-							send_recv_cmd(data, 0x03, 0xEE, 0x00, &reading, sizeof(u16));
+							ret = send_recv_cmd(data, 0x03, 0xEE, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
 							*val = pmbus_linear11_to_long(reading, 1000000L);
 							break;
 						case 1: // power 12v
-							send_recv_cmd(data, 0x02, 0x00, 0x00, NULL, 0);
-							send_recv_cmd(data, 0x03, 0x96, 0x00, &reading, sizeof(u16));
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x00, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x96, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
 							*val = pmbus_linear11_to_long(reading, 1000000L);
 							break;
 						case 2: // power 5v
-							send_recv_cmd(data, 0x02, 0x00, 0x01, NULL, 0);
-							send_recv_cmd(data, 0x03, 0x96, 0x00, &reading, sizeof(u16));
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x01, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x96, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
 							*val = pmbus_linear11_to_long(reading, 1000000L);
 							break;
 						case 3: // power 3.3v
-							send_recv_cmd(data, 0x02, 0x00, 0x02, NULL, 0);
-							send_recv_cmd(data, 0x03, 0x96, 0x00, &reading, sizeof(u16));
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x02, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x96, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
 							*val = pmbus_linear11_to_long(reading, 1000000L);
 							break;
 						default:
@@ -324,6 +410,12 @@ static int corsairpsu_read(struct device *dev, enum hwmon_sensor_types type,
 	}
 
 	return 0;
+
+err:
+	if (ret == USB_MUTEX_LOCKED_ERR) {
+		return -EINVAL;
+	}
+	return -EOPNOTSUPP;
 }
 
 static const char *corsairpsu_chip_label[] = {
