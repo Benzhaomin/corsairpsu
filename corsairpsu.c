@@ -764,7 +764,9 @@ static int corsairpsu_probe(struct hid_device *dev, const struct hid_device_id *
 	struct usb_interface *usbif = to_usb_interface(dev->dev.parent);
 	struct corsairpsu_data *data;
 	struct device *hwmon_dev;
-	char name[32], vendor[32], product[32];
+	char name[32] = { 0 };
+	char vendor[32] = { 0 };
+	char product[32] = { 0 };
 
 	// hid device setup
 	ret = hid_parse(dev);
