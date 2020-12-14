@@ -89,25 +89,35 @@ static int usb_send_recv_cmd(struct corsairpsu_data* data) {
 /*
 	Send/receive command helper
 
-	Name             Length  Opcode  Example
+	Name         Addr+r/w   Opcode  Example
 	---              ---     ---     ---
 	name             0xFE    0x03    'RM650i'
 	vendor           0x03    0x99    'CORSAIR'
 	product          0x03    0x9A    'RM650i'
 	temp1            0x03    0x8D    46.2
 	temp2            0x03    0x8E    39.0
+	temp_limit       0x03    0x4f    70.0    
 	fan rpm          0x03    0x90    0.0
 	fan control      0x03    0xF0    0 (hardware) or 1 (software)
 	voltage supply   0x03    0x88    230.0
 	power total      0x03    0xEE    82.0
 	voltage 12v      0x03    0x8B    12.1
+ 	12v OV fault	 0x03	 0x40	 15.59
+	12v UV fault	 0x03	 0x44	 8.40
 	current 12v      0x03    0x8C    5.2
+ 	12v OC fault	 0x03	 0x46	 85.0
 	power 12v        0x03    0x96    66.0
 	voltage 5v       0x03    0x8B    5.0
+ 	5v OV fault	 0x03	 0x40	 6.5
+	5v UV fault	 0x03	 0x44	 3.5
 	current 5v       0x03    0x8C    2.9
+ 	5v OC fault	 0x03	 0x46	 40.0
 	power 5v         0x03    0x96    14.0
 	voltage 3.3v     0x03    0x8B    3.3
+ 	3.3v OV fault	 0x03	 0x40	 4.29
+	3.3v UV fault	 0x03	 0x44	 2.31
 	current 3.3v     0x03    0x8C    2.2
+ 	3.3v OC fault	 0x03	 0x46	 40.0
 	power 3.3v       0x03    0x96    7.0
 	total uptime     0x03    0xD1    23160895
 	uptime           0x03    0xD2    41695
@@ -120,6 +130,10 @@ static int usb_send_recv_cmd(struct corsairpsu_data* data) {
 	fan mode         0x03    0x3A    TODO
 	fan pwm          0x03    0x3B    TODO
 	fan status       0x03    0x81    TODO
+ 	"blackbox mode"	 0x03	 0xd9	 TODO what does this even do?
+ 	"setting reset"  0x03	 0xdd 0x01
+ 	determine max wattage based on model name?
+ 	report status registers (temp @ 0x7d, comms @ 0x7e, fans @ 0x81)
 */
 static int send_recv_cmd(struct corsairpsu_data* data, u8 length, u8 opcode, u8 opdata,
 							void *result, size_t result_size) {
@@ -224,6 +238,20 @@ static int corsairpsu_read(struct device *dev, enum hwmon_sensor_types type,
 							return -EOPNOTSUPP;
 					}
 					break;
+				case hwmon_temp_max: //TODO: for kernel 5.10, use case hwmon_temp_rated_max:
+					switch(channel) {
+						case 0:
+						case 1:
+							ret = send_recv_cmd(data, 0x03, 0x4F, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
+							*val = pmbus_linear11_to_long(reading, 1000L);
+							break;
+						default:
+							return -EOPNOTSUPP;
+					}
+					break;
 				default:
 					return -EOPNOTSUPP;
 			}
@@ -299,6 +327,84 @@ static int corsairpsu_read(struct device *dev, enum hwmon_sensor_types type,
 							return -EOPNOTSUPP;
 					}
 					break;
+				case hwmon_in_min: //todo: switch to rated_min for kernel 5.10
+					switch (channel) {
+						case 1:
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x00, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x44, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
+							*val = pmbus_linear11_to_long(reading, 1000L);
+							break;
+						case 2:
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x01, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x44, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
+							*val = pmbus_linear11_to_long(reading, 1000L);
+							break;
+						case 3:
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x02, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x44, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
+							*val = pmbus_linear11_to_long(reading, 1000L);
+							break;
+						default:
+							return -EOPNOTSUPP;
+					}
+					break;
+				case hwmon_in_max: //todo: switch to rated_max for kernel 5.10
+					switch (channel) {
+						case 1:
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x00, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x40, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
+							*val = pmbus_linear11_to_long(reading, 1000L);
+							break;
+						case 2:
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x01, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x40, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
+							*val = pmbus_linear11_to_long(reading, 1000L);
+							break;
+						case 3:
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x02, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x40, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
+							*val = pmbus_linear11_to_long(reading, 1000L);
+							break;
+						default:
+							return -EOPNOTSUPP;
+					}
+					break;
 				default:
 					return -EOPNOTSUPP;
 			}
@@ -337,6 +443,45 @@ static int corsairpsu_read(struct device *dev, enum hwmon_sensor_types type,
 								goto err;
 							}
 							ret = send_recv_cmd(data, 0x03, 0x8C, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
+							*val = pmbus_linear11_to_long(reading, 1000L);
+							break;
+						default:
+							return -EOPNOTSUPP;
+					}
+					break;
+				case hwmon_curr_max: //todo: switch to rated_max for kernel 5.10
+					switch (channel) {
+						case 0:
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x00, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x46, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
+							*val = pmbus_linear11_to_long(reading, 1000L);
+							break;
+						case 1:
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x01, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x46, 0x00, &reading, sizeof(u16));
+							if (ret < 0) {
+								goto err;
+							}
+							*val = pmbus_linear11_to_long(reading, 1000L);
+							break;
+						case 2:
+							ret = send_recv_cmd(data, 0x02, 0x00, 0x02, NULL, 0);
+							if (ret < 0) {
+								goto err;
+							}
+							ret = send_recv_cmd(data, 0x03, 0x46, 0x00, &reading, sizeof(u16));
 							if (ret < 0) {
 								goto err;
 							}
@@ -482,23 +627,23 @@ static int corsairpsu_read_labels(struct device *dev,
 }
 
 static const struct hwmon_channel_info *corsairpsu_info[] = {
-	HWMON_CHANNEL_INFO(temp,
-		HWMON_T_INPUT | HWMON_T_LABEL,		// temp1
-		HWMON_T_INPUT | HWMON_T_LABEL),		// temp2
+	HWMON_CHANNEL_INFO(temp,					//TODO: use RATED_MAX on kernel 5.10
+		HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_MAX,		// temp1 
+		HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_MAX),		// temp2
 
 	HWMON_CHANNEL_INFO(fan,
 		HWMON_F_INPUT | HWMON_F_LABEL),		// fan rpm
 
-	HWMON_CHANNEL_INFO(in,
-		HWMON_I_INPUT | HWMON_I_LABEL,		// voltage supply
-		HWMON_I_INPUT | HWMON_I_LABEL,		// voltage 12v
-		HWMON_I_INPUT | HWMON_I_LABEL,		// voltage 5v
-		HWMON_I_INPUT | HWMON_I_LABEL),		// voltage 3.3v
+	HWMON_CHANNEL_INFO(in, //TODO: use RATED_MAX/MIN on kernel 5.10
+		HWMON_I_INPUT | HWMON_I_LABEL,	// voltage supply
+		HWMON_I_INPUT | HWMON_I_LABEL | HWMON_I_MAX | HWMON_I_MIN,		// voltage 12v
+		HWMON_I_INPUT | HWMON_I_LABEL | HWMON_I_MAX | HWMON_I_MIN,		// voltage 5v
+		HWMON_I_INPUT | HWMON_I_LABEL | HWMON_I_MAX | HWMON_I_MIN),		// voltage 3.3v
 
-	HWMON_CHANNEL_INFO(curr,
-		HWMON_C_INPUT | HWMON_C_LABEL,		// current 12v
-		HWMON_C_INPUT | HWMON_C_LABEL,		// current 5v
-		HWMON_C_INPUT | HWMON_C_LABEL),		// current 3.3v
+	HWMON_CHANNEL_INFO(curr, //TODO: use RATED_MAX/MIN on kernel 5.10
+		HWMON_C_INPUT | HWMON_C_LABEL | HWMON_C_MAX,		// current 12v
+		HWMON_C_INPUT | HWMON_C_LABEL | HWMON_C_MAX,		// current 5v
+		HWMON_C_INPUT | HWMON_C_LABEL | HWMON_C_MAX),		// current 3.3v
 
 	HWMON_CHANNEL_INFO(power,
 		HWMON_P_INPUT | HWMON_P_LABEL,		// power total
