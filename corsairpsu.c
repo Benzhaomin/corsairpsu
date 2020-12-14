@@ -162,7 +162,7 @@ static int send_recv_cmd(struct corsairpsu_data* data, u8 addr, u8 opcode, u8 op
 	if (ret < 0) {
 		return ret;
 	}
-	if(data->buf[1] != opcode) {
+	if( (data->buf[1] & 0xff) != (opcode & 0xff)) {
 		//we got an error response from the PSU. Try handshaking again:
 		ret = send_recv_cmd_impl(data, 0xfe, 0x03, 0x00, NULL, 0);
 		if(ret < 0) {
