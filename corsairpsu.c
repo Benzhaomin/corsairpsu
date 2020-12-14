@@ -5,6 +5,7 @@
  *
  * Tested devices:
  *	- RM650i
+ *	- HX850i
  *	- HX1000i
  *
  * Based on:
