@@ -136,18 +136,48 @@ static int usb_send_recv_cmd(struct corsairpsu_data* data) {
  	determine max wattage based on model name?
  	report status registers (temp @ 0x7d, comms @ 0x7e, fans @ 0x81)
 */
-static int send_recv_cmd(struct corsairpsu_data* data, u8 length, u8 opcode, u8 opdata,
-							void *result, size_t result_size) {
+
+static int send_recv_cmd_impl(struct corsairpsu_data* data, u8 addr, u8 opcode, u8 opdata,
+			 void *result, size_t result_size) {
 	int ret;
 
 	memset(data->buf, 0, 64);
-	data->buf[0] = length;
+	data->buf[0] = addr;
 	data->buf[1] = opcode;
 	data->buf[2] = opdata;
 
 	ret = usb_send_recv_cmd(data);
 	if (ret < 0) {
 		return ret;
+	}
+
+	return 0;
+}
+
+static int send_recv_cmd(struct corsairpsu_data* data, u8 addr, u8 opcode, u8 opdata,
+							void *result, size_t result_size) {
+	int ret;
+
+	ret = send_recv_cmd_impl(data, addr, opcode, opdata, result, result_size);
+	if (ret < 0) {
+		return ret;
+	}
+	if( (data->buf[1] & 0xff) != (opcode & 0xff)) {
+		//we got an error response from the PSU. Try handshaking again:
+		ret = send_recv_cmd_impl(data, 0xfe, 0x03, 0x00, NULL, 0);
+		if(ret < 0) {
+			return ret;
+		}
+		//we got a good handshake. retry the original command:
+		ret = send_recv_cmd_impl(data, addr, opcode, opdata, result, result_size);
+		if (ret < 0) {
+			return ret;
+		}
+		if(data->buf[1] != opcode) {
+			//well, looks like it really was an error.
+			return -ENODATA;
+		}
+		//success! fall down to the next block & copy the data out.
 	}
 	if (result != NULL && result_size > 0) {
 		memcpy(result, data->buf + 2, result_size);
@@ -734,7 +764,9 @@ static int corsairpsu_probe(struct hid_device *dev, const struct hid_device_id *
 	struct usb_interface *usbif = to_usb_interface(dev->dev.parent);
 	struct corsairpsu_data *data;
 	struct device *hwmon_dev;
-	char name[32], vendor[32], product[32];
+	char name[32] = { 0 };
+	char vendor[32] = { 0 };
+	char product[32] = { 0 };
 
 	// hid device setup
 	ret = hid_parse(dev);
