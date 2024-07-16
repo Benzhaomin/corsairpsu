@@ -47,6 +47,7 @@ This driver should work with any [Corsair i-CUE PSU](https://www.corsair.com/us/
 - HX850i
 - HX1000i
 - HX1200i
+- HX1500i (2022 edition)
 
 ## Install
 
