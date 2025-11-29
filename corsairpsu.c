@@ -45,6 +45,19 @@ MODULE_VERSION("0.1.7");
 #define USB_MUTEX_LOCKED_ERR -99
 static DEFINE_MUTEX(usbdev_mutex);
 
+/* make it compatible with older kernels
+ * https://github.com/ocerman/zenpower/commit/5d68cd732825115f359c5e5c5de18a63030e4f93
+ */
+#ifndef HWMON_CHANNEL_INFO
+#define HWMON_CHANNEL_INFO(stype, ...)	\
+	(&(struct hwmon_channel_info) {		\
+		.type = hwmon_##stype,			\
+		.config = (u32 []) {			\
+			__VA_ARGS__, 0				\
+		}								\
+	})
+#endif
+
 struct corsairpsu_data {
 	struct usb_device *usbdev;
 	char *buf;
