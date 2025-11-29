@@ -6,6 +6,10 @@ All values are exposed using the sysfs interface (`/sys/class/hwmon/hwmon*/`).
 
 Sensors, except a few custom attributes, can also be viewed with the `sensors` command.
 
+## Disclaimer
+
+A `corsair-psu` module is now part of the Linux kernel, see https://github.com/torvalds/linux/blob/master/drivers/hwmon/corsair-psu.c. You should just use it instead of this one.
+
 ## Usage
 
 ```bash
@@ -38,15 +42,18 @@ $ cat /sys/class/hwmon/hwmon3/ocp_mode
 
 This driver should work with any [Corsair i-CUE PSU](https://www.corsair.com/us/en/Categories/Products/Power-Supply-Units/c/Cor_Products_PowerSupply_Units?q=%3Afeatured%3ApsuLinkSupport%3AYes).
 
+- RM550i
 - RM650i
 - RM750i
 - RM850i
 - RM1000i
+- HX550i
 - HX650i
 - HX750i
 - HX850i
-- HX1000i
-- HX1200i
+- HX1000i legacy and Series 2023
+- HX1200i legacy, Series 2023 and Series 2025
+- HX1500i legacy and Series 2023
 
 ## Install
 
