@@ -97,7 +97,7 @@ static int usb_send_recv_cmd(struct corsairpsu_data* data) {
 	product          0x03    0x9A    'RM650i'
 	temp1            0x03    0x8D    46.2
 	temp2            0x03    0x8E    39.0
-	temp_limit       0x03    0x4f    70.0    
+	temp_limit       0x03    0x4f    70.0
 	fan rpm          0x03    0x90    0.0
 	fan control      0x03    0xF0    0 (hardware) or 1 (software)
 	voltage supply   0x03    0x88    230.0
@@ -659,7 +659,7 @@ static int corsairpsu_read_labels(struct device *dev,
 
 static const struct hwmon_channel_info *corsairpsu_info[] = {
 	HWMON_CHANNEL_INFO(temp,					//TODO: use RATED_MAX on kernel 5.10
-		HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_MAX,		// temp1 
+		HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_MAX,		// temp1
 		HWMON_T_INPUT | HWMON_T_LABEL | HWMON_T_MAX),		// temp2
 
 	HWMON_CHANNEL_INFO(fan,
@@ -808,15 +808,21 @@ static void corsairpsu_remove(struct hid_device *dev) {
 }
 
 static const struct hid_device_id corsairpsu_devices[] = {
+	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c09) }, // RM550i
 	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c0a) }, // RM650i
 	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c0b) }, // RM750i
 	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c0c) }, // RM850i
 	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c0d) }, // RM1000i
+	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c03) }, // HX550i
 	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c04) }, // HX650i
 	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c05) }, // HX750i
 	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c06) }, // HX850i
-	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c07) }, // HX1000i
-	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c08) }, // HX1200i
+	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c07) }, // HX1000i legacy
+	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c1e) }, // HX1000i Series 2023
+	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c08) }, // HX1200i legacy
+	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c23) }, // HX1200i Series 2023
+	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c27) }, // HX1200i Series 2025
+	{ HID_USB_DEVICE(USB_VENDOR_ID_CORSAIR, 0x1c1f) }, // HX1500i legacy and Series 2023
 	{}
 };
 
